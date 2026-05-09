@@ -30,8 +30,8 @@ jobs:
 
             index_html="$(wget -qO- --timeout=15 "${feed_url}/")"
 
-            homeproxy_file="$(echo "$index_html" | grep -oE 'luci-app-homeproxy_[^"< ]*_all\.apk' | sort -V | tail -n 1)"
-            singbox_file="$(echo "$index_html" | grep -oE "sing-box_[^\"< ]*_${platform}\\.apk" | sort -V | tail -n 1)"
+            homeproxy_file="$(echo "$index_html" | grep -oE 'luci-app-homeproxy_[^"< ]*_all\.ipk' | sort -V | tail -n 1)"
+            singbox_file="$(echo "$index_html" | grep -oE "sing-box_[^\"< ]*_${platform}\\.ipk" | sort -V | tail -n 1)"
 
             [ -n "$homeproxy_file" ] || { echo "Error: luci-app-homeproxy not found for ${platform}"; exit 1; }
             [ -n "$singbox_file" ] || { echo "Error: sing-box not found for ${platform}"; exit 1; }
@@ -48,7 +48,7 @@ jobs:
           done
 
           # 提取版本号
-          VERSION=$(ls makeself/homeproxy_x86_64/luci-app-homeproxy_*.apk | head -n 1 | sed -n 's/.*luci-app-homeproxy_\(.*\)_all\.apk/\1/p')
+          VERSION=$(ls makeself/homeproxy_x86_64/luci-app-homeproxy_*.ipk | head -n 1 | sed -n 's/.*luci-app-homeproxy_\(.*\)_all\.ipk/\1/p')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Create install.sh
@@ -58,12 +58,12 @@ jobs:
           echo "=== HomeProxy 安装开始 ==="
           echo "当前目录: $(pwd)"
           echo "目录内容:"
-          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
+          ls -la *.ipk 2>/dev/null || echo "未找到 .ipk 文件"
           echo ""
           apk update
           echo ""
-          echo "开始安装 APK 包..."
-          for f in *.apk; do
+          echo "开始安装 IPK 包..."
+          for f in *.ipk; do
             if [ -f "$f" ]; then
               echo "安装: $f"
               apk add --allow-untrusted "$f" || echo "安装失败: $f"
