@@ -24,327 +24,64 @@ jobs:
 
       - name: Download OpenClash
         run: |
-          echo "Downloading OpenClash for ${{ env.LATEST_TAG }}..."
           curl -sk "https://api.github.com/repos/vernesong/OpenClash/releases" > releases.txt
-
           mkdir -p openclash_x86_64 openclash_aarch64_cortex-a53
-
-          # 下载 APK 和 IPK（兼容不同固件）
           for ext in apk ipk; do
             url=$(grep "browser_download_url" releases.txt | grep "luci-app-openclash.*\.${ext}" | head -1 | awk -F '"' '{print $4}')
             if [ -n "$url" ]; then
-              echo "下载 ${ext}: $url"
-              curl -sL --connect-timeout 30 -m 600 -o "openclash.${ext}" "$url"
-              if [ -s "openclash.${ext}" ]; then
-                cp "openclash.${ext}" openclash_x86_64/
-                cp "openclash.${ext}" openclash_aarch64_cortex-a53/
-                echo "  OK: openclash.${ext} ($(ls -lh openclash.${ext} | awk '{print $5}'))"
-              fi
+              curl -sL -o "openclash.${ext}" "$url"
+              cp "openclash.${ext}" openclash_x86_64/
+              cp "openclash.${ext}" openclash_aarch64_cortex-a53/
             fi
           done
-
           rm -f releases.txt
-
-          echo ""
-          echo "=== 检查文件 ==="
-          ls -lh openclash_x86_64/
-          ls -lh openclash_aarch64_cortex-a53/
 
       - name: Create install.sh
         run: |
-          cat << 'EOF' > openclash_x86_64/install.sh
+          cat << 'EOF' > install.sh
           #!/bin/sh
-
           echo "=== OpenClash 安装开始 ==="
-          echo "当前目录: $(pwd)"
-          echo "目录内容:"
-          ls -la *.apk *.ipk 2>/dev/null || echo "未找到安装文件"
-          echo ""
-
-          install_pkg() {
-            local pkg_name="$1"
-            echo "--- 安装: $pkg_name ---"
-
-            if [ ! -f "$pkg_name" ]; then
-              echo "  文件不存在: $pkg_name"
-              return 1
-            fi
-
-            if apk add --allow-untrusted "$pkg_name" 2>/dev/null; then
-              echo "  $pkg_name 安装成功 (apk)"
-              return 0
-            fi
-
-            local err_msg
-            err_msg=$(apk add --allow-untrusted "$pkg_name" 2>&1 || true)
-            echo "  apk 方式失败: $(echo "$err_msg" | grep 'unable to select' | head -1)"
-
-            echo "  尝试手动解压安装..."
-            local tmp_dir
-            tmp_dir=$(mktemp -d)
-            cd "$tmp_dir"
-
-            local data_archive=""
-            case "$pkg_name" in
-              *.apk)
-                if ! tar -xzf "$OLDPWD/$pkg_name" 2>/dev/null; then
-                  echo "  解压失败 (apk)"
-                  cd "$OLDPWD"
-                  rm -rf "$tmp_dir"
-                  return 1
-                fi
-                # apk 是扁平 tar.gz，没有嵌套 data.tar.gz，文件已直接解压到 tmp_dir
-                echo "  复制文件到 / ..."
-                tar -xzf "$OLDPWD/$pkg_name" -C / 2>/dev/null
-                if [ -f ".INSTALL" ]; then
-                  echo "  执行 .INSTALL 脚本..."
-                  chmod +x ".INSTALL" 2>/dev/null
-                  sh ".INSTALL" 2>/dev/null || true
-                fi
-                cd "$OLDPWD"
-                rm -rf "$tmp_dir"
-                echo "  $pkg_name 安装成功 (手动解压)"
-                return 0
-                ;;
-              *.ipk)
-                if ! ar x "$OLDPWD/$pkg_name" 2>/dev/null; then
-                  echo "  ar 解包失败 (ipk)"
-                  cd "$OLDPWD"
-                  rm -rf "$tmp_dir"
-                  return 1
-                fi
-                for d in data.tar.gz data.tar.xz data.tar; do
-                  [ -f "$d" ] && data_archive="$d" && break
-                done
-                if [ -z "$data_archive" ]; then
-                  echo "  未找到 data 归档文件"
-                  cd "$OLDPWD"
-                  rm -rf "$tmp_dir"
-                  return 1
-                fi
-                ;;
-            esac
-
-            if [ -z "$data_archive" ]; then
-              echo "  未找到 data 归档文件"
-              cd "$OLDPWD"
-              rm -rf "$tmp_dir"
-              return 1
-            fi
-
-            echo "  解压 $data_archive 到 / ..."
-            case "$data_archive" in
-              *.gz) tar -xzf "$data_archive" -C / ;;
-              *.xz) tar -xJf "$data_archive" -C / ;;
-              *)    tar -xf "$data_archive" -C / ;;
-            esac
-
-            if [ -f ".INSTALL" ]; then
-              echo "  执行 .INSTALL 脚本..."
-              chmod +x ".INSTALL" 2>/dev/null
-              sh ".INSTALL" 2>/dev/null || true
-            fi
-
-            cd "$OLDPWD"
-            rm -rf "$tmp_dir"
-            echo "  $pkg_name 安装成功 (手动解压)"
-            return 0
-          }
-
-          # 优先尝试 APK，失败再试 IPK
-          found=false
-          for f in *.apk *.ipk; do
-            [ -f "$f" ] || continue
-            if install_pkg "$f"; then
-              found=true
-              break
-            fi
-          done
-
-          if [ "$found" = false ]; then
-            echo "错误: 所有安装方式均失败"
+          
+          PKG=""
+          [ -f "luci-app-openclash.apk" ] && PKG="luci-app-openclash.apk"
+          [ -f "luci-app-openclash.ipk" ] && PKG="luci-app-openclash.ipk"
+          
+          if [ -z "$PKG" ]; then
+            echo "错误: 未找到安装包"
             exit 1
           fi
 
-          echo ""
-          echo "=== 安装完成 ==="
-          echo "验证:"
-          [ -f /etc/init.d/openclash ] && echo "  OpenClash 服务脚本: 存在" || echo "  OpenClash 服务脚本: 未找到"
-          [ -f /usr/share/luci/menu.d/luci-app-openclash.json ] && echo "  LuCI 菜单: 存在" || echo "  LuCI 菜单: 未找到"
-
-          if [ -f /etc/init.d/openclash ]; then
-            /etc/init.d/openclash enable
-            /etc/init.d/openclash start
-            echo "  OpenClash 服务已启用并启动"
+          if command -v apk >/dev/null 2>&1; then
+            echo "检测到 ImmortalWrt/系统 (apk)，正在安装..."
+            apk add --allow-untrusted "$PKG"
+          elif command -v opkg >/dev/null 2>&1; then
+            echo "检测到 OpenWrt (opkg)，正在安装..."
+            opkg update
+            opkg install "$PKG" --force-depends
+          else
+            echo "错误: 未找到包管理器"
+            exit 1
           fi
 
-          echo "请刷新 LuCI 页面（Ctrl+F5 清除缓存）"
+          echo "清理 LuCI 缓存..."
+          rm -rf /tmp/luci-indexcache /tmp/luci-modulecache
+          
+          if [ -f /etc/init.d/rpcd ]; then /etc/init.d/rpcd restart; fi
+          echo "=== 安装完成，请刷新页面 ==="
           EOF
-          chmod +x openclash_x86_64/install.sh
-          cp openclash_x86_64/install.sh openclash_aarch64_cortex-a53/install.sh
+          chmod +x install.sh
+          cp install.sh openclash_x86_64/
+          cp install.sh openclash_aarch64_cortex-a53/
 
       - name: Create self-extracting packages
         run: |
-          mv openclash_x86_64 makeself/
-          mv openclash_aarch64_cortex-a53 makeself/
           cd makeself
-          ./makeself.sh openclash_x86_64/ openclash_25.12_${{ env.LATEST_TAG }}_x86_64.run "OpenClash Installer (25.12)" ./install.sh
-          ./makeself.sh openclash_aarch64_cortex-a53/ openclash_25.12_${{ env.LATEST_TAG }}_aarch64.run "OpenClash Installer (25.12)" ./install.sh
-
-      - name: Create release notes
-        run: |
-          cat > release_notes.md << 'ENDOFFILE'
-          ## OpenClash .run (25.12)
-          
-          一款功能强大的 OpenWrt 代理插件，支持多种代理协议和智能分流。
-          
-          ---
-          
-          ## 系统要求
-          
-          - **固件版本**：OpenWrt 或 ImmortalWrt `25.12+`
-          - **支持架构**：`x86_64`、`aarch64_cortex-a53`
-          - **磁盘空间**：至少 50MB 可用空间
-          - **权限要求**：root 权限
-          
-          ---
-          
-          ## 功能特性
-          
-          - **多协议支持**：支持 Shadowsocks、V2Ray、Trojan、Hysteria 等协议
-          - **智能分流**：支持规则分流和全局模式
-          - **订阅管理**：支持订阅链接自动更新节点
-          - **Web 管理**：提供友好的 LuCI 管理界面
-          - **核心集成**：内置 Clash Meta 核心
-          
-          ---
-          
-          ## 安装步骤
-          
-          ### 通过 SSH 安装
-          
-          **1. 上传安装包**
-          
-          方式 A - 使用 SCP（推荐）：
-          ```bash
-          # x86_64 设备
-          scp openclash_25.12_*_x86_64.run root@192.168.1.1:/tmp/
-          
-          # aarch64 设备
-          scp openclash_25.12_*_aarch64.run root@192.168.1.1:/tmp/
-          ```
-          
-          方式 B - 使用 WinSCP/FileZilla：
-          - 连接路由器（协议：SCP，端口：22）
-          - 将对应的 `.run` 文件上传到 `/tmp/` 目录
-          
-          **注意**：不要使用 LuCI 的"上传软件包"功能，`.run` 文件不是 APK 包！
-          
-          **2. 进入临时目录**
-          ```bash
-          cd /tmp
-          ```
-          
-          **3. 添加执行权限**
-          ```bash
-          # x86_64 设备
-          chmod +x openclash_25.12_*_x86_64.run
-          
-          # aarch64 设备
-          chmod +x openclash_25.12_*_aarch64.run
-          ```
-          
-          **4. 执行安装**
-          ```bash
-          # x86_64 设备
-          ./openclash_25.12_*_x86_64.run
-          
-          # aarch64 设备
-          ./openclash_25.12_*_aarch64.run
-          ```
-          
-          **5. 等待安装完成**
-          - 安装过程会自动安装依赖并安装插件
-          - 看到安装成功提示后继续下一步
-          
-          **6. 刷新 LuCI 界面**
-          - 退出并重新登录 LuCI
-          - 在 **服务** 菜单下找到 **OpenClash** 入口
-          
-          ---
-          
-          ## 验证安装
-          
-          **检查是否安装成功**：
-          ```bash
-          apk info | grep openclash
-          ```
-          
-          **访问界面**：
-          - 在 LuCI 菜单中找到 **服务 -> OpenClash** 入口
-          
-          ---
-          
-          ## 使用方法
-          
-          **1. 打开 OpenClash 设置界面**
-          - 登录 LuCI 管理界面
-          - 找到 **服务 -> OpenClash** 菜单项
-          
-          **2. 基本配置**
-          - **运行模式**：选择代理模式（规则/全局/直连）
-          - **监听端口**：设置代理监听端口
-          - **DNS 设置**：配置 DNS 解析方式
-          
-          **3. 订阅管理**
-          - 添加订阅链接
-          - 更新节点列表
-          - 选择可用节点
-          
-          **4. 保存并应用**
-          - 点击 **保存并应用**
-          - 重启 OpenClash 服务使配置生效
-          
-          ---
-          
-          ## 常见问题
-          
-          ### Q1: 安装后 LuCI 界面没有 OpenClash 菜单？
-          **A**: 这是 LuCI 缓存问题，请：
-          1. 退出 LuCI 登录
-          2. 清除浏览器缓存
-          3. 重新登录即可
-          
-          ### Q2: 代理不生效？
-          **A**: 检查以下几点：
-          1. 确认 OpenClash 服务已启动
-          2. 检查防火墙规则是否正确
-          3. 查看日志：`logread | grep openclash`
-          
-          ### Q3: 如何卸载 OpenClash？
-          **A**: 
-          ```bash
-          apk del luci-app-openclash
-          rm -rf /etc/openclash
-          ```
-          
-          ---
-          
-          ## 注意事项
-          
-          - **核心更新**：定期更新 Clash Meta 核心以获得最新功能
-          - **订阅安全**：仅使用可信的订阅链接
-          - **资源占用**：代理工具会占用一定系统资源
-          
-          ENDOFFILE
+          ./makeself.sh ../openclash_x86_64/ openclash_25.12_${{ env.LATEST_TAG }}_x86_64.run "OpenClash" ./install.sh
+          ./makeself.sh ../openclash_aarch64_cortex-a53/ openclash_25.12_${{ env.LATEST_TAG }}_aarch64.run "OpenClash" ./install.sh
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v-openclash-25.12-${{ env.LATEST_TAG }}
-          name: "OpenClash 25.12 ${{ env.LATEST_TAG }}"
-          body_path: release_notes.md
-          files: makeself/openclash_25.12_*.run
-          draft: false
-          prerelease: false
+          files: makeself/*.run
           overwrite: true
