@@ -29,10 +29,22 @@ jobs:
 
           mkdir -p openclash_x86_64 openclash_aarch64_cortex-a53
 
-          apk_url=$(grep "browser_download_url" releases.txt | grep "openclash.apk" | head -1 | awk -F '"' '{print $4}')
+          # 获取最新 release 的下载链接
+          apk_url=$(grep "browser_download_url" releases.txt | grep -E "openclash.*\.apk" | head -1 | awk -F '"' '{print $4}')
+
+          if [ -z "$apk_url" ]; then
+            echo "错误：未找到 OpenClash APK 下载链接"
+            cat releases.txt | head -50
+            exit 1
+          fi
 
           echo "下载 APK: $apk_url"
           curl --connect-timeout 30 -m 600 -kLo "openclash.apk" "$apk_url"
+
+          if [ ! -f "openclash.apk" ] || [ ! -s "openclash.apk" ]; then
+            echo "错误：APK 下载失败或文件为空"
+            exit 1
+          fi
 
           cp openclash.apk openclash_x86_64/
           cp openclash.apk openclash_aarch64_cortex-a53/
