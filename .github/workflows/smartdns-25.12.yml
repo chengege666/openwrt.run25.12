@@ -60,8 +60,23 @@ jobs:
         run: |
           cat << 'EOF' > smartdns_x86_64/install.sh
           #!/bin/sh
+          echo "=== SmartDNS 安装开始 ==="
+          echo "当前目录: $(pwd)"
+          echo "目录内容:"
+          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
+          echo ""
           apk update
-          apk add -q --force-overwrite --clean-protected --allow-untrusted luci-app-smartdns.apk
+          echo ""
+          echo "开始安装 APK 包..."
+          for f in *.apk; do
+            if [ -f "$f" ]; then
+              echo "安装: $f"
+              apk add --allow-untrusted "$f" || echo "安装失败: $f"
+            else
+              echo "跳过: $f (文件不存在)"
+            fi
+          done
+          echo ""
           cp smartdns-x86_64 /usr/sbin/smartdns
           chmod +x /usr/sbin/smartdns
           echo "SmartDNS 安装完成"
@@ -70,8 +85,23 @@ jobs:
 
           cat << 'EOF' > smartdns_aarch64_cortex-a53/install.sh
           #!/bin/sh
+          echo "=== SmartDNS 安装开始 ==="
+          echo "当前目录: $(pwd)"
+          echo "目录内容:"
+          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
+          echo ""
           apk update
-          apk add -q --force-overwrite --clean-protected --allow-untrusted luci-app-smartdns.apk
+          echo ""
+          echo "开始安装 APK 包..."
+          for f in *.apk; do
+            if [ -f "$f" ]; then
+              echo "安装: $f"
+              apk add --allow-untrusted "$f" || echo "安装失败: $f"
+            else
+              echo "跳过: $f (文件不存在)"
+            fi
+          done
+          echo ""
           cp smartdns-aarch64 /usr/sbin/smartdns
           chmod +x /usr/sbin/smartdns
           echo "SmartDNS 安装完成"

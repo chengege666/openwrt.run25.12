@@ -29,12 +29,12 @@ jobs:
           for platform in $PLATFORMS; do
             feed_url="${BASE_URL}/${platform}/kiddin9"
             echo "Preparing platform: $platform"
-            mkdir -p "makeself/ssrp_${platform}/depends"
+            mkdir -p "makeself/ssrp_${platform}"
 
             index_html="$(wget -qO- --timeout=15 "${feed_url}/")"
 
             for prefix in "${FILE_PREFIXES[@]}"; do
-              files=$(echo "$index_html" | grep -oE "href=\"${prefix}[^\"]*\"" | sed 's/href="//;s/"//' | sort -V)
+              files=$(echo "$index_html" | grep -oE "href=\"${prefix}[^\"]*\.apk\"" | sed 's/href="//;s/"//' | sort -V)
               for file in $files; do
                 skip=false
                 for exclude in "${EXCLUDE_PREFIXES[@]}"; do
@@ -48,35 +48,42 @@ jobs:
                   continue
                 fi
                 echo "Downloading: ${feed_url}/${file}"
-                curl -L --fail --connect-timeout 15 --max-time 60 "${feed_url}/${file}" -o "makeself/ssrp_${platform}/depends/${file}" -#
+                curl -L --fail --connect-timeout 15 --max-time 60 "${feed_url}/${file}" -o "makeself/ssrp_${platform}/${file}" -#
               done
             done
 
-            # 移动主程序到根目录
-            mv makeself/ssrp_${platform}/depends/luci-app-ssr-plus*.ipk makeself/ssrp_${platform}/ 2>/dev/null || true
-
             echo "=== $platform ==="
             ls -la makeself/ssrp_${platform}/
-            ls -la makeself/ssrp_${platform}/depends/ | head -20
           done
 
           # 提取版本号
-          VERSION=$(ls makeself/ssrp_x86_64/luci-app-ssr-plus*.ipk | head -n 1 | sed -n 's/.*luci-app-ssr-plus_\(.*\)_all\.ipk/\1/p')
+          VERSION=$(ls makeself/ssrp_x86_64/luci-app-ssr-plus*.apk | head -n 1 | sed -n 's/.*luci-app-ssr-plus_\(.*\)_all\.apk/\1/p')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Create install.sh
         run: |
           cat << 'EOF' > makeself/ssrp_x86_64/install.sh
           #!/bin/sh
-          set -e
-          echo "===> 正在更新软件源..."
-          opkg update
-          echo "===> 正在安装 SSR-Plus 依赖包..."
-          opkg install depends/*.ipk --force-depends
-          echo "===> 正在安装 SSR-Plus 主程序..."
-          opkg install luci-app-ssr-plus*.ipk --force-depends
-          echo "===> 安装完成！"
-          echo "请在 LuCI 服务菜单中配置 SSR-Plus"
+          echo "=== SSR-Plus 安装开始 ==="
+          echo "当前目录: $(pwd)"
+          echo "目录内容:"
+          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
+          echo ""
+          apk update
+          echo ""
+          echo "开始安装 APK 包..."
+          for f in *.apk; do
+            if [ -f "$f" ]; then
+              echo "安装: $f"
+              apk add --allow-untrusted "$f" || echo "安装失败: $f"
+            else
+              echo "跳过: $f (文件不存在)"
+            fi
+          done
+          echo ""
+          echo "=== 安装完成 ==="
+          echo "已安装的包:"
+          apk info | grep ssr-plus
           EOF
           chmod +x makeself/ssrp_x86_64/install.sh
           cp makeself/ssrp_x86_64/install.sh makeself/ssrp_aarch64_cortex-a53/install.sh

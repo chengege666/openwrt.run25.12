@@ -22,14 +22,13 @@ jobs:
       - name: Clone makeself repository
         run: git clone https://github.com/megastep/makeself.git
 
-      - name: Download OpenClash APK and dependencies
+      - name: Download OpenClash APK
         run: |
-          echo "Downloading OpenClash APK and dependencies for ${{ env.LATEST_TAG }}..."
+          echo "Downloading OpenClash APK for ${{ env.LATEST_TAG }}..."
           curl -sk "https://api.github.com/repos/vernesong/OpenClash/releases" > releases.txt
 
-          mkdir -p openclash_x86_64/depends openclash_aarch64_cortex-a53/depends
+          mkdir -p openclash_x86_64 openclash_aarch64_cortex-a53
 
-          # 获取最新 release 的下载链接
           apk_url=$(grep "browser_download_url" releases.txt | grep -E "luci-app-openclash.*\.apk" | head -1 | awk -F '"' '{print $4}')
 
           if [ -z "$apk_url" ]; then
@@ -51,63 +50,38 @@ jobs:
             exit 1
           fi
 
-          # 下载依赖包
-          BASE_URL="https://dl.openwrt.ai/packages-25.12"
-          PLATFORMS="x86_64 aarch64_cortex-a53"
+          cp openclash.apk openclash_x86_64/
+          cp openclash.apk openclash_aarch64_cortex-a53/
 
-          DEPENDS=("bash" "dnsmasq-full" "curl" "ca-bundle" "ip-full" "ruby" "ruby-yaml" "unzip" "luci-compat" "luci" "luci-base" "luci-mod-status" "luci-mod-network" "luci-mod-system")
-          KERNEL_DEPENDS=("kmod-tun" "kmod-inet-diag" "kmod-nft-tproxy")
-
-          for platform in $PLATFORMS; do
-            feed_url="${BASE_URL}/${platform}/packages"
-            kernel_url="${BASE_URL}/${platform}/kmods/$(uname -r 2>/dev/null || echo '5.15.*')"
-            echo "准备平台: $platform"
-
-            # 下载普通依赖
-            for dep in "${DEPENDS[@]}"; do
-              index_html="$(wget -qO- --timeout=15 "${feed_url}/" 2>/dev/null || echo "")"
-              dep_file="$(echo "$index_html" | grep -oE "${dep}_[^\"< ]*\\.apk" | sort -V | tail -n 1)"
-              if [ -n "$dep_file" ]; then
-                echo "下载: ${feed_url}/${dep_file}"
-                curl -L --fail --connect-timeout 15 --max-time 60 "${feed_url}/${dep_file}" -o "openclash_${platform}/depends/${dep_file}" -# 2>/dev/null || echo "跳过: $dep_file"
-              fi
-            done
-
-            # 下载内核模块依赖
-            for dep in "${KERNEL_DEPENDS[@]}"; do
-              index_html="$(wget -qO- --timeout=15 "${kernel_url}/" 2>/dev/null || echo "")"
-              dep_file="$(echo "$index_html" | grep -oE "${dep}_[^\"< ]*\\.apk" | sort -V | tail -n 1)"
-              if [ -n "$dep_file" ]; then
-                echo "下载: ${kernel_url}/${dep_file}"
-                curl -L --fail --connect-timeout 15 --max-time 60 "${kernel_url}/${dep_file}" -o "openclash_${platform}/depends/${dep_file}" -# 2>/dev/null || echo "跳过: $dep_file"
-              fi
-            done
-
-            # 复制主程序
-            cp openclash.apk "openclash_${platform}/"
-
-            echo "=== $platform ==="
-            ls -la "openclash_${platform}/"
-            ls -la "openclash_${platform}/depends/" | head -20
-          done
+          echo ""
+          echo "=== 检查文件 ==="
+          ls -la openclash_x86_64/
+          ls -la openclash_aarch64_cortex-a53/
 
       - name: Create install.sh
         run: |
           cat << 'EOF' > openclash_x86_64/install.sh
           #!/bin/sh
-          set -e
-          echo "===> 正在更新软件源..."
+          echo "=== OpenClash 安装开始 ==="
+          echo "当前目录: $(pwd)"
+          echo "目录内容:"
+          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
+          echo ""
           apk update
-          echo "===> 正在安装 OpenClash 依赖包..."
-          if [ -d "depends" ] && [ "$(ls depends/*.apk 2>/dev/null)" ]; then
-            apk add -q --force-overwrite --clean-protected --allow-untrusted depends/*.apk
-          fi
-          echo "===> 正在安装 OpenClash 主程序..."
-          apk add -q --force-overwrite --clean-protected --allow-untrusted openclash.apk
-          echo "===> 清除 LuCI 缓存..."
-          rm -rf /tmp/luci-modulecache/* /tmp/luci-indexcache 2>/dev/null || true
-          echo "===> 安装完成！"
-          echo "请退出并重新登录 LuCI，然后在服务菜单中配置 OpenClash"
+          echo ""
+          echo "开始安装 APK 包..."
+          for f in *.apk; do
+            if [ -f "$f" ]; then
+              echo "安装: $f"
+              apk add --allow-untrusted "$f" || echo "安装失败: $f"
+            else
+              echo "跳过: $f (文件不存在)"
+            fi
+          done
+          echo ""
+          echo "=== 安装完成 ==="
+          echo "已安装的包:"
+          apk info | grep openclash
           EOF
           chmod +x openclash_x86_64/install.sh
           cp openclash_x86_64/install.sh openclash_aarch64_cortex-a53/install.sh

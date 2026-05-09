@@ -67,11 +67,26 @@ jobs:
         run: |
           cat << 'EOF' > daed_x86_64/install.sh
           #!/bin/sh
+          echo "=== Daed 安装开始 ==="
+          echo "当前目录: $(pwd)"
+          echo "目录内容:"
+          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
+          echo ""
           apk update
-          apk add -q --force-overwrite --clean-protected --allow-untrusted daed-*.apk
-          apk add -q --force-overwrite --clean-protected --allow-untrusted luci-app-daed.apk
-          apk add -q --force-overwrite --clean-protected --allow-untrusted luci-i18n-daed-zh-cn.apk
-          echo "Daed 安装完成"
+          echo ""
+          echo "开始安装 APK 包..."
+          for f in *.apk; do
+            if [ -f "$f" ]; then
+              echo "安装: $f"
+              apk add --allow-untrusted "$f" || echo "安装失败: $f"
+            else
+              echo "跳过: $f (文件不存在)"
+            fi
+          done
+          echo ""
+          echo "=== 安装完成 ==="
+          echo "已安装的包:"
+          apk info | grep daed
           EOF
           chmod +x daed_x86_64/install.sh
           cp daed_x86_64/install.sh daed_aarch64_cortex-a53/install.sh

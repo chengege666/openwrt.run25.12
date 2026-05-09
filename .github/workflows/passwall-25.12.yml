@@ -55,15 +55,26 @@ jobs:
         run: |
           cat << 'EOF' > passwall_x86_64/install.sh
           #!/bin/sh
-          set -e
-          echo "===> 正在更新软件源..."
+          echo "=== PassWall 安装开始 ==="
+          echo "当前目录: $(pwd)"
+          echo "目录内容:"
+          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
+          echo ""
           apk update
-          echo "===> 正在安装 PassWall 主程序..."
-          apk add -q --force-overwrite --clean-protected --allow-untrusted luci-app-passwall.apk
-          echo "===> 正在安装中文语言包..."
-          apk add -q --force-overwrite --clean-protected --allow-untrusted luci-i18n-passwall-zh-cn.apk
-          echo "===> 安装完成！"
-          echo "请在 LuCI 服务菜单中配置 PassWall"
+          echo ""
+          echo "开始安装 APK 包..."
+          for f in *.apk; do
+            if [ -f "$f" ]; then
+              echo "安装: $f"
+              apk add --allow-untrusted "$f" || echo "安装失败: $f"
+            else
+              echo "跳过: $f (文件不存在)"
+            fi
+          done
+          echo ""
+          echo "=== 安装完成 ==="
+          echo "已安装的包:"
+          apk info | grep passwall
           EOF
           chmod +x passwall_x86_64/install.sh
           cp passwall_x86_64/install.sh passwall_aarch64_cortex-a53/install.sh
