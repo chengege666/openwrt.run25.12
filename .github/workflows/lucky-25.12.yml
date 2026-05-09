@@ -64,13 +64,105 @@ jobs:
         run: |
           cat << 'EOF' > lucky_x86_64/install.sh
           #!/bin/sh
-          apk update
-          for f in luci-app-lucky*.apk luci-i18n-lucky*.apk lucky*.apk; do
-            [ -f "$f" ] && apk add --allow-untrusted "$f"
+
+          echo "=== Lucky 安装开始 ==="
+          echo "当前目录: $(pwd)"
+          echo ""
+
+          apk update || echo "apk update 继续"
+
+          install_apk() {
+            local apk_name="$1"
+            echo "--- 安装: $apk_name ---"
+
+            if [ ! -f "$apk_name" ]; then
+              echo "  文件不存在: $apk_name"
+              return 1
+            fi
+
+            if apk add --allow-untrusted "$apk_name" 2>/dev/null; then
+              echo "  $apk_name 安装成功 (apk)"
+              return 0
+            fi
+
+            local err_msg
+            err_msg=$(apk add --allow-untrusted "$apk_name" 2>&1 || true)
+            echo "  apk 方式失败: $(echo "$err_msg" | grep 'unable to select' | head -1)"
+
+            echo "  尝试手动解压安装..."
+            local tmp_dir
+            tmp_dir=$(mktemp -d)
+            cd "$tmp_dir"
+
+            if ! tar -xzf "$OLDPWD/$apk_name" 2>/dev/null; then
+              echo "  解压失败"
+              cd "$OLDPWD"
+              rm -rf "$tmp_dir"
+              return 1
+            fi
+
+            local data_archive=""
+            for d in data.tar.gz data.tar.xz data.tar; do
+              [ -f "$d" ] && data_archive="$d" && break
+            done
+
+            if [ -z "$data_archive" ]; then
+              echo "  未找到 data 归档文件"
+              cd "$OLDPWD"
+              rm -rf "$tmp_dir"
+              return 1
+            fi
+
+            echo "  解压 $data_archive 到 / ..."
+            case "$data_archive" in
+              *.gz) tar -xzf "$data_archive" -C / ;;
+              *.xz) tar -xJf "$data_archive" -C / ;;
+              *)    tar -xf "$data_archive" -C / ;;
+            esac
+
+            if [ -f ".INSTALL" ]; then
+              echo "  执行 .INSTALL 脚本..."
+              chmod +x ".INSTALL" 2>/dev/null
+              sh ".INSTALL" 2>/dev/null || true
+            fi
+
+            cd "$OLDPWD"
+            rm -rf "$tmp_dir"
+            echo "  $apk_name 安装成功 (手动解压)"
+            return 0
+          }
+
+          # 先安装 lucky 核心（非 luci- 开头的 apk）
+          for f in *.apk; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              luci-*) ;;
+              *) install_apk "$f" ;;
+            esac
           done
-          /etc/init.d/lucky enable
-          /etc/init.d/lucky start
-          echo "Lucky 安装完成"
+
+          # 再安装 luci-app-lucky
+          for f in luci-app-lucky*.apk; do
+            [ -f "$f" ] && install_apk "$f"
+          done
+
+          # 最后安装 luci-i18n
+          for f in luci-i18n-lucky*.apk; do
+            [ -f "$f" ] && install_apk "$f"
+          done
+
+          echo ""
+          echo "=== 安装完成 ==="
+          echo "验证:"
+          [ -f /etc/init.d/lucky ] && echo "  Lucky 服务脚本: 存在" || echo "  Lucky 服务脚本: 未找到"
+          [ -f /usr/share/luci/menu.d/luci-app-lucky.json ] && echo "  LuCI 菜单: 存在" || echo "  LuCI 菜单: 未找到"
+
+          if [ -f /etc/init.d/lucky ]; then
+            /etc/init.d/lucky enable
+            /etc/init.d/lucky start
+            echo "  Lucky 服务已启用并启动"
+          fi
+
           echo "Web UI: http://$(uci get network.lan.ipaddr 2>/dev/null || hostname -i):16601"
           EOF
           chmod +x lucky_x86_64/install.sh
