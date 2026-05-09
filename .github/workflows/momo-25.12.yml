@@ -240,3 +240,6 @@ jobs:
           name: "Momo 25.12 ${{ env.LATEST_TAG }}"
           body_path: release_notes.md
           files: makeself/momo_25.12_*.run
+          draft: false
+          prerelease: false
+          overwrite: true

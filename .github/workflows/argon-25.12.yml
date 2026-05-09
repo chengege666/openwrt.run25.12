@@ -226,3 +226,6 @@ jobs:
           name: "Argon Theme 25.12 ${{ env.LATEST_TAG }}"
           body_path: release_notes.md
           files: makeself/argon_25.12_*.run
+          draft: false
+          prerelease: false
+          overwrite: true

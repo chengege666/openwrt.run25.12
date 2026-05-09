@@ -202,3 +202,6 @@ jobs:
           name: "Aurora Theme 25.12 ${{ env.LATEST_TAG }}"
           body_path: release_notes.md
           files: makeself/aurora_25.12_*.run
+          draft: false
+          prerelease: false
+          overwrite: true

@@ -208,3 +208,6 @@ jobs:
           name: "PassWall2 25.12 ${{ env.LATEST_TAG }}"
           body_path: release_notes.md
           files: makeself/passwall2_25.12_*.run
+          draft: false
+          prerelease: false
+          overwrite: true

@@ -214,3 +214,6 @@ jobs:
           name: "SSR-Plus 25.12 ${{ env.VERSION }}"
           body_path: release_notes.md
           files: makeself/ssrp_25.12_*.run
+          draft: false
+          prerelease: false
+          overwrite: true
