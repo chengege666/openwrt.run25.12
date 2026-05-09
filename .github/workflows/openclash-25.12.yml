@@ -50,7 +50,7 @@ jobs:
           BASE_URL="https://dl.openwrt.ai/packages-25.12"
           PLATFORMS="x86_64 aarch64_cortex-a53"
 
-          DEPENDS=("bash" "dnsmasq-full" "curl" "ca-bundle" "ip-full" "ruby" "ruby-yaml" "unzip" "luci-compat" "luci" "luci-base")
+          DEPENDS=("bash" "dnsmasq-full" "curl" "ca-bundle" "ip-full" "ruby" "ruby-yaml" "unzip" "luci-compat" "luci" "luci-base" "luci-mod-status" "luci-mod-network" "luci-mod-system")
           KERNEL_DEPENDS=("kmod-tun" "kmod-inet-diag" "kmod-nft-tproxy")
 
           for platform in $PLATFORMS; do
