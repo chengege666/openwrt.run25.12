@@ -249,7 +249,7 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: lucky-25.12-${{ env.VERSION }}
+          tag_name: v-lucky-25.12-${{ env.VERSION }}
           name: "Lucky 25.12 ${{ env.LATEST_TAG }}"
           body_path: release_notes.md
           files: makeself/lucky_25.12_*.run

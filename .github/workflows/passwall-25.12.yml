@@ -199,7 +199,7 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: passwall-25.12-${{ env.LATEST_TAG }}
+          tag_name: v-passwall-25.12-${{ env.LATEST_TAG }}
           name: "PassWall 25.12 ${{ env.LATEST_TAG }}"
           body_path: release_notes.md
           files: makeself/passwall_25.12_*.run

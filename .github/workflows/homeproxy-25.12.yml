@@ -199,7 +199,7 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: homeproxy-25.12-${{ env.VERSION }}
+          tag_name: v-homeproxy-25.12-${{ env.VERSION }}
           name: "HomeProxy 25.12 ${{ env.VERSION }}"
           body_path: release_notes.md
           files: makeself/homeproxy_25.12_*.run

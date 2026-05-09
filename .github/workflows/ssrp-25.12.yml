@@ -210,7 +210,7 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ssrp-25.12-${{ env.VERSION }}
+          tag_name: v-ssrp-25.12-${{ env.VERSION }}
           name: "SSR-Plus 25.12 ${{ env.VERSION }}"
           body_path: release_notes.md
           files: makeself/ssrp_25.12_*.run
