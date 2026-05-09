@@ -47,8 +47,8 @@ jobs:
             ls -lh "makeself/homeproxy_${platform}/"
           done
 
-          # 提取版本号
-          VERSION=$(ls makeself/homeproxy_x86_64/luci-app-homeproxy_*.ipk | head -n 1 | sed -n 's/.*luci-app-homeproxy_\(.*\)_all\.ipk/\1/p')
+          # 提取版本号，并替换非法 tag 字符（~ → -）
+          VERSION=$(ls makeself/homeproxy_x86_64/luci-app-homeproxy_*.ipk | head -n 1 | sed -n 's/.*luci-app-homeproxy_\(.*\)_all\.ipk/\1/p' | sed 's/~/-/g')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Create install.sh
