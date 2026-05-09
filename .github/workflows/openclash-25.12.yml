@@ -93,9 +93,18 @@ jobs:
                   rm -rf "$tmp_dir"
                   return 1
                 fi
-                for d in data.tar.gz data.tar.xz data.tar; do
-                  [ -f "$d" ] && data_archive="$d" && break
-                done
+                # apk 是扁平 tar.gz，没有嵌套 data.tar.gz，文件已直接解压到 tmp_dir
+                echo "  复制文件到 / ..."
+                tar -xzf "$OLDPWD/$pkg_name" -C / 2>/dev/null
+                if [ -f ".INSTALL" ]; then
+                  echo "  执行 .INSTALL 脚本..."
+                  chmod +x ".INSTALL" 2>/dev/null
+                  sh ".INSTALL" 2>/dev/null || true
+                fi
+                cd "$OLDPWD"
+                rm -rf "$tmp_dir"
+                echo "  $pkg_name 安装成功 (手动解压)"
+                return 0
                 ;;
               *.ipk)
                 if ! ar x "$OLDPWD/$pkg_name" 2>/dev/null; then
