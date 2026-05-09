@@ -1,4 +1,4 @@
-name: Build OpenClash .run (Latest)
+name: Build OpenClash .run (25.12)
 
 on:
   workflow_dispatch:
