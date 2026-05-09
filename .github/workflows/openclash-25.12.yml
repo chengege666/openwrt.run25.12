@@ -67,9 +67,160 @@ jobs:
           cd makeself
           ./makeself.sh ../openclash_pkg/ openclash_latest.run "OpenClash Installer" ./install.sh
 
+      - name: Create release notes
+        run: |
+          cat > release_notes.md << 'ENDOFFILE'
+          ## OpenClash .run 一键安装包
+          
+          一款基于 Clash 内核的 OpenWrt 代理客户端，支持丰富的代理协议和规则配置。
+          
+          ---
+          
+          ## 系统要求
+          
+          - **固件版本**：OpenWrt 或 ImmortalWrt `25.12+`
+          - **支持架构**：`x86_64`、`aarch64`、`arm`、`mips` 等（取决于 APK 包支持的架构）
+          - **磁盘空间**：至少 20MB 可用空间
+          - **权限要求**：root 权限
+          
+          ---
+          
+          ## 功能特性
+          
+          - **多协议支持**：支持 Shadowsocks、V2Ray、Trojan、SOCKS5 等多种协议
+          - **规则模式**：支持全局代理、规则匹配、直连等多种模式
+          - **节点管理**：支持订阅、手动添加、节点测速
+          - **面板集成**：内置 Clash 面板，方便查看连接状态
+          - **自动更新**：支持内核和订阅自动更新
+          
+          ---
+          
+          ## 安装步骤
+          
+          ### 通过 SSH 安装
+          
+          **1. 上传安装包**
+          
+          方式 A - 使用 SCP（推荐）：
+          ```bash
+          scp openclash_latest.run root@192.168.1.1:/tmp/
+          ```
+          
+          方式 B - 使用 WinSCP/FileZilla：
+          - 连接路由器（协议：SCP，端口：22）
+          - 将 `openclash_latest.run` 文件上传到 `/tmp/` 目录
+          
+          **注意**：不要使用 LuCI 的"上传软件包"功能，`.run` 文件不是 APK 包！
+          
+          **2. 进入临时目录**
+          ```bash
+          cd /tmp
+          ```
+          
+          **3. 添加执行权限**
+          ```bash
+          chmod +x openclash_latest.run
+          ```
+          
+          **4. 执行安装**
+          ```bash
+          ./openclash_latest.run
+          ```
+          
+          **5. 等待安装完成**
+          - 安装过程会自动安装依赖并安装 OpenClash
+          - 看到安装成功提示后继续下一步
+          
+          **6. 刷新 LuCI 界面**
+          - 强制刷新浏览器（Ctrl+F5）
+          - 在 **服务** 菜单中即可看到 OpenClash
+          
+          ---
+          
+          ## 验证安装
+          
+          **检查是否安装成功**：
+          ```bash
+          apk info | grep openclash
+          ```
+          
+          **查看安装文件**：
+          ```bash
+          ls /usr/lib/lua/luci/controller/openclash.lua
+          ```
+          
+          **重启服务**：
+          ```bash
+          /etc/init.d/openclash restart
+          ```
+          
+          ---
+          
+          ## 快速配置
+          
+          **1. 进入 OpenClash**
+          - 登录 LuCI 管理界面
+          - 进入 **服务 -> OpenClash** 页面
+          
+          **2. 添加订阅**
+          - 进入 **订阅管理** 标签页
+          - 填入你的订阅链接
+          - 点击 **更新订阅**
+          
+          **3. 选择节点**
+          - 进入 **节点列表** 标签页
+          - 选择一个可用节点
+          - 点击 **应用配置**
+          
+          **4. 启动代理**
+          - 在 **运行状态** 标签页
+          - 点击 **启动** 按钮
+          - Clash 内核正常运行后即可上网
+          
+          ---
+          
+          ## 常见问题
+          
+          ### Q1: 安装后找不到 OpenClash 菜单？
+          **A**: 强制刷新浏览器（Ctrl+F5），或清除浏览器缓存后重试。
+          
+          ### Q2: 依赖安装失败？
+          **A**: 手动执行以下命令安装依赖：
+          ```bash
+          apk update
+          apk add bash curl ca-bundle ipset ip-full ruby ruby-yaml unzip iptables kmod-ipt-nat iptables-mod-tproxy iptables-mod-extra kmod-tun luci-compat kmod-inet-diag kmod-nft-tproxy
+          ```
+          
+          ### Q3: Clash 内核启动失败？
+          **A**: 检查以下问题：
+          1. 确认 CPU 架构是否匹配：`uname -m`
+          2. 在 OpenClash **全局设置 -> 版本更新** 中重新更新内核
+          3. 检查系统日志：`logread | grep clash`
+          
+          ### Q4: 如何卸载 OpenClash？
+          **A**: 
+          ```bash
+          service openclash stop
+          apk del luci-app-openclash
+          rm -rf /etc/openclash
+          ```
+          
+          ---
+          
+          ## 注意事项
+          
+          - **订阅安全**：请确保使用可靠的订阅服务商
+          - **内核更新**：首次启动可能需要自动下载 Clash 内核，请保持网络畅通
+          - **防火墙规则**：安装过程会自动配置防火墙规则，卸载后需手动清理
+          - **DNS 设置**：如有 DNS 冲突问题，可在 OpenClash 设置中调整 DNS 模式
+          
+          ENDOFFILE
+
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: openclash-installer-${{ github.run_number }}
+          name: "OpenClash 一键安装包 ${{ github.run_number }}"
+          body_path: release_notes.md
           files: makeself/openclash_latest.run
           overwrite: true
