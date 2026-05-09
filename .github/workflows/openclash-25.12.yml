@@ -1,4 +1,4 @@
-name: Build OpenClash .run (25.12)
+name: Build OpenClash .run (Latest)
 
 on:
   workflow_dispatch:
@@ -10,78 +10,66 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch latest release tag
-        id: fetch_latest_tag
-        run: |
-          latest_tag=$(curl -sk https://api.github.com/repos/vernesong/OpenClash/releases | grep "tag_name" | head -n 1 | awk -F ":" '{print $2}' | sed 's/\"//g;s/,//;s/ //')
-          echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
-
-      - name: Clone makeself repository
+      - name: Clone makeself
         run: git clone https://github.com/megastep/makeself.git
 
-      - name: Download OpenClash
+      - name: Download OpenClash APK
         run: |
-          curl -sk "https://api.github.com/repos/vernesong/OpenClash/releases" > releases.txt
-          mkdir -p openclash_x86_64 openclash_aarch64_cortex-a53
-          for ext in apk ipk; do
-            url=$(grep "browser_download_url" releases.txt | grep "luci-app-openclash.*\.${ext}" | head -1 | awk -F '"' '{print $4}')
-            if [ -n "$url" ]; then
-              curl -sL -o "openclash.${ext}" "$url"
-              cp "openclash.${ext}" openclash_x86_64/
-              cp "openclash.${ext}" openclash_aarch64_cortex-a53/
-            fi
-          done
-          rm -f releases.txt
+          mkdir -p openclash_pkg
+          # 获取最新版本下载链接
+          url=$(curl -sk https://api.github.com/repos/vernesong/OpenClash/releases/latest | grep "browser_download_url" | grep "luci-app-openclash.*\.apk" | head -1 | cut -d '"' -f 4)
+          curl -L "$url" -o openclash_pkg/luci-app-openclash.apk
+          echo "DOWNLOADED_FILE=luci-app-openclash.apk" >> $GITHUB_ENV
 
       - name: Create install.sh
         run: |
-          cat << 'EOF' > install.sh
+          cat << 'EOF' > openclash_pkg/install.sh
           #!/bin/sh
-          echo "=== OpenClash 安装开始 ==="
+          echo "=== 正在准备安装 OpenClash 及其依赖 ==="
           
-          PKG=""
-          [ -f "luci-app-openclash.apk" ] && PKG="luci-app-openclash.apk"
-          [ -f "luci-app-openclash.ipk" ] && PKG="luci-app-openclash.ipk"
-          
-          if [ -z "$PKG" ]; then
-            echo "错误: 未找到安装包"
-            exit 1
-          fi
+          # 定义依赖列表
+          DEPENDS="luci luci-base dnsmasq-full bash curl ca-bundle ipset ip-full ruby ruby-yaml unzip iptables kmod-ipt-nat iptables-mod-tproxy iptables-mod-extra kmod-tun luci-compat ip6tables-mod-nat kmod-inet-diag kmod-nft-tproxy"
 
+          install_deps() {
+            if command -v apk >/dev/null 2>&1; then
+              echo "使用 APK 安装依赖..."
+              apk update
+              apk add --no-cache $DEPENDS
+            elif command -v opkg >/dev/null 2>&1; then
+              echo "使用 OPKG 安装依赖..."
+              opkg update
+              opkg install $DEPENDS --force-depends
+            fi
+          }
+
+          install_deps
+
+          echo "正在安装 OpenClash..."
           if command -v apk >/dev/null 2>&1; then
-            echo "检测到 ImmortalWrt/系统 (apk)，正在安装..."
-            apk add --allow-untrusted "$PKG"
-          elif command -v opkg >/dev/null 2>&1; then
-            echo "检测到 OpenWrt (opkg)，正在安装..."
-            opkg update
-            opkg install "$PKG" --force-depends
+            apk add --allow-untrusted ./luci-app-openclash.apk
           else
-            echo "错误: 未找到包管理器"
-            exit 1
+            opkg install ./luci-app-openclash.apk --force-depends
           fi
 
-          echo "清理 LuCI 缓存..."
+          echo "清理缓存..."
           rm -rf /tmp/luci-indexcache /tmp/luci-modulecache
-          
           if [ -f /etc/init.d/rpcd ]; then /etc/init.d/rpcd restart; fi
-          echo "=== 安装完成，请刷新页面 ==="
+          
+          echo "=== 安装完成！请强制刷新浏览器页面 (Ctrl+F5) ==="
           EOF
-          chmod +x install.sh
-          cp install.sh openclash_x86_64/
-          cp install.sh openclash_aarch64_cortex-a53/
+          chmod +x openclash_pkg/install.sh
 
-      - name: Create self-extracting packages
+      - name: Create .run package
         run: |
           cd makeself
-          ./makeself.sh ../openclash_x86_64/ openclash_25.12_${{ env.LATEST_TAG }}_x86_64.run "OpenClash" ./install.sh
-          ./makeself.sh ../openclash_aarch64_cortex-a53/ openclash_25.12_${{ env.LATEST_TAG }}_aarch64.run "OpenClash" ./install.sh
+          ./makeself.sh ../openclash_pkg/ openclash_latest.run "OpenClash Installer" ./install.sh
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v-openclash-25.12-${{ env.LATEST_TAG }}
-          files: makeself/*.run
+          tag_name: openclash-installer-${{ github.run_number }}
+          files: makeself/openclash_latest.run
           overwrite: true
