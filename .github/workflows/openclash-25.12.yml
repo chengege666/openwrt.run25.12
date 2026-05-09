@@ -2,20 +2,6 @@ name: Build OpenClash .run (25.12)
 
 on:
   workflow_dispatch:
-    inputs:
-      arch:
-        description: '目标路由器架构 (OpenWrt 25.12+ APK 架构名称)'
-        required: true
-        default: 'x86_64'
-        type: choice
-        options:
-          - x86_64
-          - aarch64_generic
-          - arm_cortex-a7
-          - arm_cortex-a9
-          - arm_cortex-a15
-          - mips_24kc
-          - mipsel_24kc
 
 permissions:
   contents: write
@@ -27,38 +13,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Clone makeself (固定版本 v2.5.1)
-        run: |
-          git clone --branch v2.5.1 --depth 1 https://github.com/megastep/makeself.git
+      - name: Clone makeself
+        run: git clone https://github.com/megastep/makeself.git
 
-      - name: Download OpenClash APK for ${{ github.event.inputs.arch }}
+      - name: Download OpenClash APK
         run: |
           mkdir -p openclash_pkg
-          # 获取包含指定架构的最新 .apk 下载链接
-          url=$(curl -sk https://api.github.com/repos/vernesong/OpenClash/releases/latest | \
-                grep "browser_download_url" | \
-                grep "luci-app-openclash.*\.apk" | \
-                grep "${{ github.event.inputs.arch }}" | \
-                head -1 | cut -d '"' -f 4)
-
-          # 检查是否获取到有效链接
-          if [ -z "$url" ]; then
-            echo "错误：未找到架构为 ${{ github.event.inputs.arch }} 的 .apk 文件"
-            echo "请检查架构名称是否正确，或前往 https://github.com/vernesong/OpenClash/releases/latest 查看可用架构"
-            exit 1
-          fi
-
-          echo "找到下载链接: $url"
+          # 获取最新版本下载链接
+          url=$(curl -sk https://api.github.com/repos/vernesong/OpenClash/releases/latest | grep "browser_download_url" | grep "luci-app-openclash.*\.apk" | head -1 | cut -d '"' -f 4)
           curl -L "$url" -o openclash_pkg/luci-app-openclash.apk
-
-          # 检查下载的文件是否非空
-          if [ ! -s openclash_pkg/luci-app-openclash.apk ]; then
-            echo "错误：下载的文件为空或不存在"
-            exit 1
-          fi
-
           echo "DOWNLOADED_FILE=luci-app-openclash.apk" >> $GITHUB_ENV
-          echo "APK 下载成功，大小: $(du -h openclash_pkg/luci-app-openclash.apk | cut -f1)"
 
       - name: Create install.sh
         run: |
@@ -115,7 +79,7 @@ jobs:
           ## 系统要求
           
           - **固件版本**：OpenWrt 或 ImmortalWrt `25.12+`
-          - **目标架构**：${{ github.event.inputs.arch }}
+          - **支持架构**：`x86_64`、`aarch64`、`arm`、`mips` 等（取决于 APK 包支持的架构）
           - **磁盘空间**：至少 20MB 可用空间
           - **权限要求**：root 权限
           
@@ -252,11 +216,11 @@ jobs:
           
           ENDOFFILE
 
-      - name: Upload Release (固定标签 openclash-latest)
+      - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: openclash-latest
-          name: "OpenClash 一键安装包 (最新版) - ${{ github.event.inputs.arch }}"
+          tag_name: openclash-installer-${{ github.run_number }}
+          name: "OpenClash 一键安装包 ${{ github.run_number }}"
           body_path: release_notes.md
           files: makeself/openclash_latest.run
           overwrite: true
