@@ -72,17 +72,69 @@ jobs:
           echo "目录内容:"
           ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
           echo ""
+
           apk update
           echo ""
-          echo "开始安装 APK 包..."
-          for f in *.apk; do
-            if [ -f "$f" ]; then
-              echo "安装: $f"
-              apk add --allow-untrusted "$f" || echo "安装失败: $f"
+
+          # 尝试安装内核 BTF 依赖（daed 需要 vmlinux-btf）
+          echo "尝试安装 vmlinux-btf 依赖..."
+          vmlinux_ok=false
+          if apk add vmlinux-btf 2>/dev/null; then
+            vmlinux_ok=true
+            echo "vmlinux-btf 安装成功"
+          else
+            echo "vmlinux-btf 虚拟包不可用，尝试查找实际包名..."
+            btf_pkg=$(apk search vmlinux-btf-* 2>/dev/null | head -1)
+            if [ -n "$btf_pkg" ]; then
+              echo "找到 BTF 包: $btf_pkg"
+              if apk add "$btf_pkg"; then
+                vmlinux_ok=true
+                echo "BTF 包安装成功"
+              else
+                echo "警告: BTF 包安装失败"
+              fi
             else
-              echo "跳过: $f (文件不存在)"
+              echo "警告: 未找到 vmlinux-btf 包，将尝试强制安装 daed"
+            fi
+          fi
+          echo ""
+
+          # 查找 daed 核心包（非 luci- 开头的 apk 文件）
+          daed_core=""
+          for f in *.apk; do
+            case "$f" in
+              luci-*) ;;
+              *) daed_core="$f"; break ;;
+            esac
+          done
+
+          # 按依赖顺序安装：daed 核心 -> luci-app-daed -> luci-i18n
+          if [ -n "$daed_core" ] && [ -f "$daed_core" ]; then
+            echo "安装核心: $daed_core"
+            if apk add --allow-untrusted "$daed_core"; then
+              echo "核心安装成功"
+            else
+              echo "核心普通安装失败，尝试强制安装..."
+              apk add --allow-untrusted --force-depends "$daed_core" || echo "安装失败: $daed_core"
+            fi
+          else
+            echo "未找到 daed 核心包"
+          fi
+
+          for name in luci-app-daed.apk luci-i18n-daed-zh-cn.apk; do
+            if [ -f "$name" ]; then
+              echo "安装: $name"
+              if apk add --allow-untrusted "$name"; then
+                echo "$name 安装成功"
+              else
+                echo "$name 普通安装失败，尝试强制安装..."
+                apk add --allow-untrusted --force-depends "$name" || echo "安装失败: $name"
+              fi
+            else
+              echo "跳过: $name (文件不存在)"
             fi
           done
+
           echo ""
           echo "=== 安装完成 ==="
           echo "已安装的包:"
