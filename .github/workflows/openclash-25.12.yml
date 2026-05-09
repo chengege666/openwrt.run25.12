@@ -99,8 +99,10 @@ jobs:
           fi
           echo "===> 正在安装 OpenClash 主程序..."
           apk add -q --force-overwrite --clean-protected --allow-untrusted openclash.apk
+          echo "===> 清除 LuCI 缓存..."
+          rm -rf /tmp/luci-modulecache/* /tmp/luci-indexcache 2>/dev/null || true
           echo "===> 安装完成！"
-          echo "请在 LuCI 服务菜单中配置 OpenClash"
+          echo "请退出并重新登录 LuCI，然后在服务菜单中配置 OpenClash"
           EOF
           chmod +x openclash_x86_64/install.sh
           cp openclash_x86_64/install.sh openclash_aarch64_cortex-a53/install.sh
