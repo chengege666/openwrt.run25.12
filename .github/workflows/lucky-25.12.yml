@@ -67,9 +67,6 @@ jobs:
 
           echo "=== Lucky 安装开始 ==="
           echo "当前目录: $(pwd)"
-          echo ""
-
-          apk update || echo "apk update 继续"
 
           install_apk() {
             local apk_name="$1"

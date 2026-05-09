@@ -22,66 +22,232 @@ jobs:
       - name: Clone makeself repository
         run: git clone https://github.com/megastep/makeself.git
 
-      - name: Download OpenClash APK
+      - name: Download OpenClash APK & dependencies
         run: |
-          echo "Downloading OpenClash APK for ${{ env.LATEST_TAG }}..."
-          curl -sk "https://api.github.com/repos/vernesong/OpenClash/releases" > releases.txt
+          BASE_URL="https://dl.openwrt.ai/packages-25.12"
+          REPOS="kiddin9 luci base packages"
+          PLATFORMS="x86_64 aarch64_cortex-a53"
 
+          download_pkg() {
+            local pkg="$1" platform="$2" dest="$3"
+            local pattern_all="${pkg}_[^\"<]*_all\\.ipk"
+            local pattern_arch="${pkg}_[^\"<]*_${platform}\\.ipk"
+            for repo in $REPOS; do
+              local idx="index_${platform}_${repo}"
+              local f
+              f=$(grep -oE "$pattern_all" "$idx" | sort -V | tail -n 1)
+              [ -z "$f" ] && f=$(grep -oE "$pattern_arch" "$idx" | sort -V | tail -n 1)
+              if [ -n "$f" ] && [ ! -f "$dest/$f" ]; then
+                curl -sL --connect-timeout 15 --max-time 120 "${BASE_URL}/${platform}/${repo}/${f}" -o "$dest/$f" && echo "  OK: $f" || echo "  FAIL: $f"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          echo "=== Step 1: 从 GitHub 下载 OpenClash ==="
+          echo "Tag: ${{ env.LATEST_TAG }}"
+          curl -sk "https://api.github.com/repos/vernesong/OpenClash/releases" > releases.txt
           mkdir -p openclash_x86_64 openclash_aarch64_cortex-a53
 
           apk_url=$(grep "browser_download_url" releases.txt | grep -E "luci-app-openclash.*\.apk" | head -1 | awk -F '"' '{print $4}')
-
           if [ -z "$apk_url" ]; then
-            echo "尝试查找其他 APK 文件..."
             apk_url=$(grep "browser_download_url" releases.txt | grep -E "\.apk$" | head -1 | awk -F '"' '{print $4}')
           fi
-
           if [ -z "$apk_url" ]; then
-            echo "错误：未找到 OpenClash APK 下载链接"
-            cat releases.txt | head -50
+            echo "错误：未找到 OpenClash APK"
             exit 1
           fi
-
-          echo "下载 APK: $apk_url"
-          curl --connect-timeout 30 -m 600 -kLo "openclash.apk" "$apk_url"
-
-          if [ ! -f "openclash.apk" ] || [ ! -s "openclash.apk" ]; then
-            echo "错误：APK 下载失败或文件为空"
+          echo "下载: $apk_url"
+          curl -sL --connect-timeout 30 -m 600 -o "openclash.apk" "$apk_url"
+          if [ ! -s "openclash.apk" ]; then
+            echo "错误：OpenClash 下载失败"
             exit 1
           fi
-
           cp openclash.apk openclash_x86_64/
           cp openclash.apk openclash_aarch64_cortex-a53/
+          echo "OpenClash APK: $(ls -lh openclash.apk | awk '{print $5}')"
 
           echo ""
-          echo "=== 检查文件 ==="
-          ls -la openclash_x86_64/
-          ls -la openclash_aarch64_cortex-a53/
+          echo "=== Step 2: 获取软件源索引 ==="
+          for platform in $PLATFORMS; do
+            for repo in $REPOS; do
+              curl -sL --connect-timeout 15 --max-time 60 "${BASE_URL}/${platform}/${repo}/" > "index_${platform}_${repo}"
+              local count
+              count=$(grep -c '\.ipk' "index_${platform}_${repo}" 2>/dev/null || echo 0)
+              echo "  ${platform}/${repo}: ${count} 个包"
+            done
+          done
+
+          echo ""
+          echo "=== Step 3: 下载依赖包 ==="
+          # 架构无关的依赖（_all.ipk）
+          COMMON_DEPS="luci luci-base luci-compat luci-lib-datatypes bash curl ca-bundle dnsmasq-full ipset ruby ruby-yaml unzip"
+
+          # 架构相关的依赖（_<arch>.ipk）
+          # iptables 套件在 OpenWrt 25.12 中使用 iptables-nft
+          # kmod-*, ip-full 等是架构相关的
+          ARCH_DEPS="iptables-nft ip6tables-nft iptables-mod-tproxy iptables-mod-extra ip-full kmod-ipt-nat kmod-tun kmod-inet-diag kmod-nft-tproxy"
+
+          for platform in $PLATFORMS; do
+            dest="openclash_${platform}"
+            echo "--- ${platform} ---"
+
+            for pkg in $COMMON_DEPS; do
+              if download_pkg "$pkg" "$platform" "$dest"; then
+                :
+              else
+                echo "  未找到: $pkg"
+              fi
+            done
+
+            for pkg in $ARCH_DEPS; do
+              if download_pkg "$pkg" "$platform" "$dest"; then
+                :
+              else
+                echo "  未找到: $pkg（可能需在固件中预装）"
+              fi
+            done
+
+            echo "  ${dest} 中共 $(ls "$dest" | wc -l) 个文件"
+          done
+
+          # 清理索引文件
+          rm -f index_* releases.txt
+
+          echo ""
+          echo "=== 下载完成 ==="
+          for platform in $PLATFORMS; do
+            echo "--- ${platform} ---"
+            ls -lh openclash_${platform}/
+          done
 
       - name: Create install.sh
         run: |
           cat << 'EOF' > openclash_x86_64/install.sh
           #!/bin/sh
-          echo "=== OpenClash 安装开始 ==="
+
+          echo "=== OpenClash 离线安装开始 ==="
           echo "当前目录: $(pwd)"
-          echo "目录内容:"
-          ls -la *.apk 2>/dev/null || echo "未找到 .apk 文件"
           echo ""
-          apk update
-          echo ""
-          echo "开始安装 APK 包..."
-          for f in *.apk; do
-            if [ -f "$f" ]; then
-              echo "安装: $f"
-              apk add --allow-untrusted "$f" || echo "安装失败: $f"
-            else
-              echo "跳过: $f (文件不存在)"
+
+          install_pkg() {
+            local pkg_name="$1"
+            echo "--- 安装: $pkg_name ---"
+
+            if [ ! -f "$pkg_name" ]; then
+              echo "  文件不存在: $pkg_name"
+              return 1
             fi
+
+            if apk add --allow-untrusted "$pkg_name" 2>/dev/null; then
+              echo "  $pkg_name 安装成功 (apk)"
+              return 0
+            fi
+
+            local err_msg
+            err_msg=$(apk add --allow-untrusted "$pkg_name" 2>&1 || true)
+            echo "  apk 方式失败: $(echo "$err_msg" | grep 'unable to select' | head -1)"
+
+            echo "  尝试手动解压安装..."
+            local tmp_dir
+            tmp_dir=$(mktemp -d)
+            cd "$tmp_dir"
+
+            if ! tar -xzf "$OLDPWD/$pkg_name" 2>/dev/null; then
+              echo "  解压失败"
+              cd "$OLDPWD"
+              rm -rf "$tmp_dir"
+              return 1
+            fi
+
+            local data_archive=""
+            for d in data.tar.gz data.tar.xz data.tar; do
+              [ -f "$d" ] && data_archive="$d" && break
+            done
+
+            if [ -z "$data_archive" ]; then
+              echo "  未找到 data 归档文件"
+              cd "$OLDPWD"
+              rm -rf "$tmp_dir"
+              return 1
+            fi
+
+            echo "  解压 $data_archive 到 / ..."
+            case "$data_archive" in
+              *.gz) tar -xzf "$data_archive" -C / ;;
+              *.xz) tar -xJf "$data_archive" -C / ;;
+              *)    tar -xf "$data_archive" -C / ;;
+            esac
+
+            if [ -f ".INSTALL" ]; then
+              echo "  执行 .INSTALL 脚本..."
+              chmod +x ".INSTALL" 2>/dev/null
+              sh ".INSTALL" 2>/dev/null || true
+            fi
+
+            cd "$OLDPWD"
+            rm -rf "$tmp_dir"
+            echo "  $pkg_name 安装成功 (手动解压)"
+            return 0
+          }
+
+          echo "Step 1: 安装基础依赖..."
+          for f in luci-base_*.ipk luci-lib-datatypes_*.ipk luci-compat_*.ipk; do
+            [ -f "$f" ] && install_pkg "$f"
           done
+
+          echo ""
+          echo "Step 2: 安装系统工具..."
+          for f in bash_*.ipk curl_*.ipk ca-bundle_*.ipk unzip_*.ipk; do
+            [ -f "$f" ] && install_pkg "$f"
+          done
+
+          echo ""
+          echo "Step 3: 安装网络依赖..."
+          for f in dnsmasq-full_*.ipk ipset_*.ipk ip-full_*.ipk iptables-nft_*.ipk ip6tables-nft_*.ipk iptables-mod-tproxy_*.ipk iptables-mod-extra_*.ipk; do
+            [ -f "$f" ] && install_pkg "$f"
+          done
+
+          echo ""
+          echo "Step 4: 安装内核模块..."
+          for f in kmod-ipt-nat_*.ipk kmod-tun_*.ipk kmod-inet-diag_*.ipk kmod-nft-tproxy_*.ipk; do
+            [ -f "$f" ] && install_pkg "$f"
+          done
+
+          echo ""
+          echo "Step 5: 安装 Ruby 环境..."
+          for f in ruby_*.ipk ruby-yaml_*.ipk; do
+            [ -f "$f" ] && install_pkg "$f"
+          done
+
+          echo ""
+          echo "Step 6: 安装 LuCI 框架..."
+          for f in luci_*.ipk; do
+            [ -f "$f" ] && install_pkg "$f"
+          done
+
+          echo ""
+          echo "Step 7: 安装 OpenClash..."
+          for f in luci-app-openclash_*.apk luci-app-openclash_*.ipk; do
+            [ -f "$f" ] && install_pkg "$f"
+          done
+
           echo ""
           echo "=== 安装完成 ==="
-          echo "已安装的包:"
-          apk info | grep openclash
+          echo "验证:"
+          [ -f /etc/init.d/openclash ] && echo "  OpenClash 服务脚本: 存在" || echo "  OpenClash 服务脚本: 未找到"
+          [ -f /usr/share/luci/menu.d/luci-app-openclash.json ] && echo "  LuCI 菜单: 存在" || echo "  LuCI 菜单: 未找到"
+          [ -f /usr/lib/lua/luci/cbi/datatypes.lua ] && echo "  luci.cbi.datatypes: 已安装" || echo "  luci.cbi.datatypes: 未找到"
+
+          if [ -f /etc/init.d/openclash ]; then
+            /etc/init.d/openclash enable
+            /etc/init.d/openclash start
+            echo "  OpenClash 服务已启用并启动"
+          fi
+
+          echo ""
+          echo "请刷新 LuCI 页面（Ctrl+F5 清除缓存）"
           EOF
           chmod +x openclash_x86_64/install.sh
           cp openclash_x86_64/install.sh openclash_aarch64_cortex-a53/install.sh
