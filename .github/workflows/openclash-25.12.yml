@@ -153,17 +153,40 @@ jobs:
             tmp_dir=$(mktemp -d)
             cd "$tmp_dir"
 
-            if ! tar -xzf "$OLDPWD/$pkg_name" 2>/dev/null; then
-              echo "  解压失败"
-              cd "$OLDPWD"
-              rm -rf "$tmp_dir"
-              return 1
-            fi
-
+            # .apk 是 tar.gz 格式，直接解压
+            # .ipk 是 ar 归档格式，需要先用 ar x 提取 data.tar.gz
             local data_archive=""
-            for d in data.tar.gz data.tar.xz data.tar; do
-              [ -f "$d" ] && data_archive="$d" && break
-            done
+            case "$pkg_name" in
+              *.apk)
+                if tar -xzf "$OLDPWD/$pkg_name" 2>/dev/null; then
+                  for d in data.tar.gz data.tar.xz data.tar; do
+                    [ -f "$d" ] && data_archive="$d" && break
+                  done
+                else
+                  echo "  解压 $pkg_name 失败"
+                  cd "$OLDPWD"
+                  rm -rf "$tmp_dir"
+                  return 1
+                fi
+                ;;
+              *.ipk)
+                if ! ar x "$OLDPWD/$pkg_name" 2>/dev/null; then
+                  echo "  ar 解包失败"
+                  cd "$OLDPWD"
+                  rm -rf "$tmp_dir"
+                  return 1
+                fi
+                for d in data.tar.gz data.tar.xz data.tar; do
+                  [ -f "$d" ] && data_archive="$d" && break
+                done
+                if [ -z "$data_archive" ]; then
+                  echo "  未找到 data 归档文件"
+                  cd "$OLDPWD"
+                  rm -rf "$tmp_dir"
+                  return 1
+                fi
+                ;;
+            esac
 
             if [ -z "$data_archive" ]; then
               echo "  未找到 data 归档文件"
