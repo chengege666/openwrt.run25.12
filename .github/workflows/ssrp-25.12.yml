@@ -58,6 +58,8 @@ jobs:
 
           # 提取版本号
           VERSION=$(ls makeself/ssrp_x86_64/luci-app-ssr-plus*.apk | head -n 1 | sed -n 's/.*luci-app-ssr-plus_\(.*\)_all\.apk/\1/p')
+          # 过滤非法字符，只保留字母、数字、-、_、.
+          VERSION=$(echo "$VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Create install.sh
