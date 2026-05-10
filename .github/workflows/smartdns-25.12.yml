@@ -27,21 +27,37 @@ jobs:
           echo "Downloading SmartDNS APK packages for ${{ env.LATEST_TAG }}..."
           curl -sk "https://api.github.com/repos/pymumu/smartdns/releases/latest" > releases.txt
 
+          echo "=== releases.txt 内容 ==="
+          cat releases.txt
+          echo ""
+
           mkdir -p smartdns_x86_64 smartdns_aarch64_cortex-a53
 
           # 下载 x86_64 的 smartdns 二进制
-          smartdns_x86_64=$(grep "browser_download_url" releases.txt | grep "smartdns-x86_64$" | head -1 | awk -F '"' '{print $4}')
+          smartdns_x86_64=$(grep "browser_download_url" releases.txt | grep "smartdns-x86_64" | grep -v "sha256" | head -1 | awk -F '"' '{print $4}')
           echo "下载 x86_64 二进制: $smartdns_x86_64"
+          if [ -z "$smartdns_x86_64" ]; then
+            echo "错误: 未找到 x86_64 下载链接"
+            exit 1
+          fi
           curl --connect-timeout 30 -m 600 -kLo "smartdns-x86_64" "$smartdns_x86_64"
 
           # 下载 aarch64 的 smartdns 二进制
-          smartdns_aarch64=$(grep "browser_download_url" releases.txt | grep "smartdns-aarch64" | head -1 | awk -F '"' '{print $4}')
+          smartdns_aarch64=$(grep "browser_download_url" releases.txt | grep "smartdns-aarch64" | grep -v "sha256" | head -1 | awk -F '"' '{print $4}')
           echo "下载 aarch64 二进制: $smartdns_aarch64"
+          if [ -z "$smartdns_aarch64" ]; then
+            echo "错误: 未找到 aarch64 下载链接"
+            exit 1
+          fi
           curl --connect-timeout 30 -m 600 -kLo "smartdns-aarch64" "$smartdns_aarch64"
 
           # 下载 luci-app-smartdns（通用 APK）
-          luci_app=$(grep "browser_download_url" releases.txt | grep "luci-app-smartdns\..*\.all-luci-all\.apk" | head -1 | awk -F '"' '{print $4}')
+          luci_app=$(grep "browser_download_url" releases.txt | grep "luci-app-smartdns" | grep "\.apk" | head -1 | awk -F '"' '{print $4}')
           echo "下载 luci-app-smartdns: $luci_app"
+          if [ -z "$luci_app" ]; then
+            echo "错误: 未找到 luci-app-smartdns 下载链接"
+            exit 1
+          fi
           curl --connect-timeout 30 -m 600 -kLo "luci-app-smartdns.apk" "$luci_app"
 
           # 复制到对应架构目录
